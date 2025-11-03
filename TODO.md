@@ -1,4 +1,0 @@
-- [x] Add a time interval between enemy waves using Config.EnemyWaveDelay (30 seconds)
-- [x] Modify the enemy wave spawn loop to include a delay after a wave is killed
-- [ ] Test the delay between waves
-- [x] Fix dead enemy blips remaining on the map
