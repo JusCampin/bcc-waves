@@ -12,7 +12,6 @@ Locales["ro_lang"] = {
     timeToClear = "Timp pentru curatat: ",
     final30 = "Ultimele 30 de secunde!",
     halfTime = "Jumatate din timp!",
-    timeRemaining = "Timp ramas",
     wave = "Val ",
     of = " din ",
     starting = " incepe",
