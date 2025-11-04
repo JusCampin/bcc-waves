@@ -25,9 +25,6 @@ CreateThread(function()
     end
 end)
 
--- Prompt loop moved to client/prompts.lua; it handles showing the start prompt and invoking
--- the MissionHandler when a site is started. This file only contains mission flow.
-
 AddEventHandler('bcc-waves:MissionHandler', function(site, siteCfg)
     local dict = "menu_textures"
     LoadTextureDict(dict)
@@ -64,6 +61,12 @@ AddEventHandler('bcc-waves:MissionHandler', function(site, siteCfg)
         local distance = #(playerCoords - siteCfg.shop.coords)
         if distance > siteCfg.areaBlip.radius then
             DBG.Info("Player left the mission area")
+            -- Notify player that they left the area, then show the generic failure message
+            local dict = "menu_textures"
+            LoadTextureDict(dict)
+            Core.NotifyLeft(_U('leftArea') or 'You left the mission area', "", dict, "menu_icon_alert", 3000, "COLOR_WHITE")
+            Wait(800)
+            Core.NotifyLeft(_U('missionFailed') or 'Mission Failed', "", dict, "menu_icon_alert", 4000, "COLOR_WHITE")
             InMission = false
             ResetWaves()
             return
@@ -187,7 +190,12 @@ AddEventHandler('bcc-waves:EnemyPeds', function(site, siteCfg)
                 end
                 if not EnsureMissionActive() then return end
 
-                local waveDelay = Config.EnemyWaveDelay * 1000
+                -- Don't apply the regular inter-wave delay before the very first
+                -- wave; only wait between subsequent waves.
+                local waveDelay = 0
+                if current > startWave then
+                    waveDelay = Config.EnemyWaveDelay * 1000
+                end
                 while waveDelay > 0 do
                     Wait(1000)
                     waveDelay = waveDelay - 1000
@@ -348,8 +356,8 @@ AddEventHandler('bcc-waves:LootHandler', function(site, siteCfg)
 
         if distance <= promptDist then
             sleep = 0
-            -- Activate the reward prompt group via the Prompts module API
-            local prompts = rawget(_G, 'Prompts') or Prompts
+            -- Activate the reward prompt group via the Prompts global API
+            local prompts = rawget(_G, 'Prompts')
             local rewardGroup = prompts and prompts.GetRewardGroup and prompts.GetRewardGroup()
             local rewardPrompt = prompts and prompts.GetRewardPrompt and prompts.GetRewardPrompt()
             if rewardGroup then
