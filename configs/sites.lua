@@ -38,6 +38,7 @@ Sites =
             hearingRange = 100.0,                    -- hearing range of enemies (in units)
         },
         rewards = {                                  -- Rewards for Completing Mission (min/max per payout)
+            distance = 1.0,                          -- distance from rewards prop to show prompt
             cash = { min = 50, max = 450 },          -- Cash reward range (set max=0 to disable range / will use min value)
             gold = { min = 1, max = 5 },             -- Gold reward range (set max=0 to disable range / will use min value)
             rol = { min = 10, max = 50 },            -- Rol reward range (set max=0 to disable range / will use min value)
@@ -102,6 +103,7 @@ Sites =
             hearingRange = 100.0,                    -- hearing range of enemies (in units)
         },
         rewards = {                                  -- Rewards for Completing Mission (min/max per payout)
+            distance = 1.0,                          -- distance from rewards prop to show prompt
             cash = { min = 50, max = 450 },          -- Cash reward range (set max=0 to disable range / will use min value)
             gold = { min = 1, max = 5 },             -- Gold reward range (set max=0 to disable range / will use min value)
             rol = { min = 10, max = 50 },            -- Rol reward range (set max=0 to disable range / will use min value)
