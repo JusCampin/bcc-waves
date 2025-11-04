@@ -1,7 +1,6 @@
 -- utils.lua: shared helpers
 -- expose common globals used across client modules
 Core = exports.vorp_core:GetCore()
-BccUtils = exports['bcc-utils'].initiate()
 ---@type BCCWavesDebugLib
 DBG = BCCWavesDebug
 
@@ -138,4 +137,57 @@ function GetClosestPlayer()
     end
 
     return closestPlayer or PlayerPedId()
+end
+
+function IsShopClosed(siteCfg)
+    local hour = GetClockHours()
+    local hoursActive = siteCfg.shop.hours.active
+
+    if not hoursActive then
+        return false
+    end
+
+    local openHour = siteCfg.shop.hours.open
+    local closeHour = siteCfg.shop.hours.close
+
+    if openHour < closeHour then
+        -- Normal: shop opens and closes on the same day
+        return hour < openHour or hour >= closeHour
+    else
+        -- Overnight: shop closes on the next day
+        return hour < openHour and hour >= closeHour
+    end
+end
+
+-- format milliseconds into human-readable time (e.g. "1m 05s" or "30s")
+function FormatMs(ms)
+    ms = math.max(0, ms)
+    local s = math.floor(ms / 1000)
+    local m = math.floor(s / 60)
+    s = s - m * 60
+    if m > 0 then
+        return string.format('%dm %02ds', m, s)
+    else
+        return string.format('%ds', s)
+    end
+end
+
+-- Build notification thresholds for a given wave timeout.
+-- Returns: notifThresholds (sorted desc), t_h, t_30
+function BuildNotifThresholds(showTimeNotifs, waveTimeout)
+    local notifThresholds = {}
+    local t_h, t_30
+    if showTimeNotifs then
+        t_h = math.floor(waveTimeout * 0.5)
+        t_30 = 30000
+        local seen = {}
+        for _, v in ipairs({ t_h, t_30 }) do
+            if v > 0 and not seen[v] then
+                table.insert(notifThresholds, v)
+                seen[v] = true
+            end
+        end
+        table.sort(notifThresholds, function(a, b) return a > b end)
+    end
+    return notifThresholds, t_h, t_30
 end
