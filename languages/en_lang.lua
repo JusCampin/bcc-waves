@@ -12,7 +12,6 @@ Locales["en_lang"] = {
     timeToClear = "Time to clear: ",
     final30 = "Final 30 seconds!",
     halfTime = "Half time!",
-    timeRemaining = "Time remaining",
     wave = "Wave ",
     of = " of ",
     starting = " starting",
