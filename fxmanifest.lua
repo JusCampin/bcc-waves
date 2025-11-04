@@ -13,7 +13,13 @@ shared_scripts {
 }
 
 server_scripts {
-    'server/server.lua'
+    'server/state.lua',
+    'server/rewards.lua',
+    'server/jobs.lua',
+    'server/cooldowns.lua',
+    'server/peds.lua',
+    'server/missions.lua',
+    'server/version.lua',
 }
 
 client_scripts {
