@@ -18,7 +18,10 @@ server_scripts {
 
 client_scripts {
     'client/utils.lua',
+    'client/mission_state.lua',
+    'client/blips.lua',
     'client/peds.lua',
+    'client/prompts.lua',
     'client/mission.lua',
 }
 
