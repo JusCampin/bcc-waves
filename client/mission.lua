@@ -62,9 +62,9 @@ AddEventHandler('bcc-waves:MissionHandler', function(site, siteCfg)
         if distance > siteCfg.areaBlip.radius then
             DBG.Info("Player left the mission area")
             -- Notify player that they left the area, then show the generic failure message
-            local dict = "menu_textures"
-            LoadTextureDict(dict)
-            Core.NotifyLeft(_U('leftArea') or 'You left the mission area', "", dict, "menu_icon_alert", 3000, "COLOR_WHITE")
+            local textureDict = "menu_textures"
+            LoadTextureDict(textureDict)
+            Core.NotifyLeft(_U('leftArea') or 'You left the mission area', "", textureDict, "menu_icon_alert", 3000, "COLOR_WHITE")
             Wait(800)
             Core.NotifyLeft(_U('missionFailed') or 'Mission Failed', "", dict, "menu_icon_alert", 4000, "COLOR_WHITE")
             InMission = false
@@ -73,6 +73,175 @@ AddEventHandler('bcc-waves:MissionHandler', function(site, siteCfg)
         end
 
         Wait(0)
+    end
+end)
+
+-- Remote mission blip handling (centralized watcher + remote enemy blips)
+local RemoteAreaBlips = {}      -- siteKey -> blip handle
+local RemoteMissionActive = {}  -- siteKey -> boolean
+local RemoteSitePeds = {}       -- siteKey -> { netId, ... }
+local RemoteEnemyBlips = {}     -- netId -> blip handle
+
+-- safety cap: maximum remote enemy blips to show per client at once
+local MAX_REMOTE_ENEMY_BLIPS = 20
+
+local function getSiteCfg(site)
+    return Sites and (Sites[site] or Sites[tostring(site)])
+end
+
+-- Server events simply toggle the active flag for the site. The centralized
+-- watcher will create/remove local blips based on player distance.
+RegisterNetEvent('bcc-waves:MissionStarted', function(site)
+    RemoteMissionActive[tostring(site)] = true
+end)
+
+RegisterNetEvent('bcc-waves:MissionEnded', function(site)
+    RemoteMissionActive[tostring(site)] = false
+    -- immediate cleanup if a blip exists
+    local key = tostring(site)
+    if RemoteAreaBlips[key] and DoesBlipExist(RemoteAreaBlips[key]) then
+        RemoveBlip(RemoteAreaBlips[key])
+        RemoteAreaBlips[key] = nil
+    end
+    -- remove any enemy blips belonging to this site
+    local netList = RemoteSitePeds[key] or {}
+    for _, nid in ipairs(netList) do
+        if RemoteEnemyBlips[nid] and DoesBlipExist(RemoteEnemyBlips[nid]) then
+            RemoveBlip(RemoteEnemyBlips[nid])
+            RemoteEnemyBlips[nid] = nil
+        end
+    end
+    RemoteSitePeds[key] = nil
+end)
+
+-- Remote peds registration handlers: server tells clients which netIds belong to a site
+RegisterNetEvent('bcc-waves:RemotePedsRegistered', function(site, netIds)
+    if not site then return end
+    RemoteSitePeds[tostring(site)] = netIds or {}
+end)
+
+RegisterNetEvent('bcc-waves:RemotePedsRemoved', function(site, netIds)
+    local key = tostring(site)
+    if not netIds or #netIds == 0 then
+        -- clear all for site
+        RemoteSitePeds[key] = nil
+    else
+        local existing = RemoteSitePeds[key]
+        if existing then
+            -- remove specific netIds from the list
+            local keep = {}
+            local removeMap = {}
+            for _, nid in ipairs(netIds) do removeMap[nid] = true end
+            for _, nid in ipairs(existing) do
+                if not removeMap[nid] then table.insert(keep, nid) end
+            end
+            RemoteSitePeds[key] = keep
+        end
+    end
+
+    -- remove any local enemy blips tied to these netIds
+    for _, nid in ipairs(netIds or {}) do
+        if RemoteEnemyBlips[nid] and DoesBlipExist(RemoteEnemyBlips[nid]) then
+            RemoveBlip(RemoteEnemyBlips[nid])
+            RemoteEnemyBlips[nid] = nil
+        end
+    end
+end)
+
+-- Central watcher: checks all active remote missions once per second and
+-- creates/removes blips based on the configured hint radius.
+CreateThread(function()
+    while true do
+        for siteKey, active in pairs(RemoteMissionActive) do
+            if not active then
+                -- ensure cleanup
+                if RemoteAreaBlips[siteKey] and DoesBlipExist(RemoteAreaBlips[siteKey]) then
+                    RemoveBlip(RemoteAreaBlips[siteKey])
+                    RemoteAreaBlips[siteKey] = nil
+                end
+                -- clean enemy blips too
+                local netList = RemoteSitePeds[siteKey] or {}
+                for _, nid in ipairs(netList) do
+                    if RemoteEnemyBlips[nid] and DoesBlipExist(RemoteEnemyBlips[nid]) then
+                        RemoveBlip(RemoteEnemyBlips[nid])
+                        RemoteEnemyBlips[nid] = nil
+                    end
+                end
+                goto CONTINUE
+            end
+
+            local siteCfg = getSiteCfg(siteKey)
+            if not siteCfg or not siteCfg.areaBlip or not siteCfg.areaBlip.radius then
+                goto CONTINUE
+            end
+
+            -- Don't show remote blip on the mission owner's client (owner already
+            -- creates a proper AreaBlip in MissionHandler).
+            if InMission and tostring(CurrentMissionSite) == tostring(siteKey) then
+                if RemoteAreaBlips[siteKey] and DoesBlipExist(RemoteAreaBlips[siteKey]) then
+                    RemoveBlip(RemoteAreaBlips[siteKey])
+                    RemoteAreaBlips[siteKey] = nil
+                end
+                goto CONTINUE
+            end
+
+            local playerPed = PlayerPedId()
+            local playerCoords = GetEntityCoords(playerPed)
+            local distance = #(playerCoords - siteCfg.shop.coords)
+
+            local hint = (Config and Config.RemoteBlip and Config.RemoteBlip.hintRadius) or 50
+            local showRadius = (siteCfg.areaBlip.radius or 0) + hint
+
+            if distance <= showRadius then
+                if not RemoteAreaBlips[siteKey] or not DoesBlipExist(RemoteAreaBlips[siteKey]) then
+                    local b = Citizen.InvokeNative(0x45F13B7E0A15C880, -1282792512, siteCfg.shop.coords.x,
+                        siteCfg.shop.coords.y, siteCfg.shop.coords.z, siteCfg.areaBlip.radius) -- BlipAddForRadius
+
+                    -- prefer the configured remote color; fall back to site style
+                    local colorKey = (Config and Config.RemoteBlip and Config.RemoteBlip.color) or 'LIGHT_YELLOW'
+                    if Config and Config.BlipColors and Config.BlipColors[colorKey] then
+                        Citizen.InvokeNative(0x662D364ABF16DE2F, b, joaat(Config.BlipColors[colorKey])) -- BlipAddModifier
+                    else
+                        local blipStyle = siteCfg.areaBlip.style or 'BLIP_STYLE_ENEMY'
+                        BlipAddModifier(b, joaat(blipStyle))
+                    end
+                    SetBlipName(b, siteCfg.blip.name)
+                    RemoteAreaBlips[siteKey] = b
+                end
+                -- create local enemy blips for remote peds (owner keeps entity control)
+                local netList = RemoteSitePeds[siteKey] or {}
+                local created = 0
+                for _, nid in ipairs(netList) do
+                    if created >= MAX_REMOTE_ENEMY_BLIPS then break end
+                    if not RemoteEnemyBlips[nid] then
+                        local ent = NetworkGetEntityFromNetworkId(nid)
+                        if ent and DoesEntityExist(ent) and not IsEntityDead(ent) then
+                            local sprite = (siteCfg.bandits and siteCfg.bandits.blipSprite) or 1
+                            RemoteEnemyBlips[nid] = Citizen.InvokeNative(0x23F74C2FDA6E7C61, sprite, ent)
+                            created = created + 1
+                        end
+                    else
+                        created = created + 1
+                    end
+                end
+            else
+                if RemoteAreaBlips[siteKey] and DoesBlipExist(RemoteAreaBlips[siteKey]) then
+                    RemoveBlip(RemoteAreaBlips[siteKey])
+                    RemoteAreaBlips[siteKey] = nil
+                end
+                -- remove any enemy blips for this site when leaving show radius
+                local netList = RemoteSitePeds[siteKey] or {}
+                for _, nid in ipairs(netList) do
+                    if RemoteEnemyBlips[nid] and DoesBlipExist(RemoteEnemyBlips[nid]) then
+                        RemoveBlip(RemoteEnemyBlips[nid])
+                        RemoteEnemyBlips[nid] = nil
+                    end
+                end
+            end
+
+            ::CONTINUE::
+        end
+        Wait(1000)
     end
 end)
 
