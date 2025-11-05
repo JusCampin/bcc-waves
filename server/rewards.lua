@@ -4,6 +4,9 @@ local Discord = BccUtils.Discord.setup(Config.Webhook.URL, Config.Webhook.Title,
 ---@type BCCWavesDebugLib
 local DBG = BCCWavesDebug
 
+-- Access global missions state for ownership validation
+local Missions = rawget(_G, 'Missions') or {}
+
 -- Server-side reward payout logic (moved from server.lua)
 Core.Callback.Register('bcc-waves:RewardPayout', function(source, cb, site)
     local src = source
@@ -27,6 +30,12 @@ Core.Callback.Register('bcc-waves:RewardPayout', function(source, cb, site)
     local siteCfg = Sites[site]
     if not siteCfg or not siteCfg.rewards then
         DBG.Warning('RewardPayout: no rewards configured for site: ' .. tostring(site))
+        return cb(false)
+    end
+
+    -- Validate that the caller is the owner of the mission for this site
+    if Missions[tostring(site)] ~= src then
+        DBG.Warning(string.format("RewardPayout: source %s attempted to payout for site %s but owner is %s", tostring(src), tostring(site), tostring(Missions[tostring(site)])))
         return cb(false)
     end
 
