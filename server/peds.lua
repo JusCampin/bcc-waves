@@ -37,6 +37,8 @@ RegisterNetEvent('bcc-waves:DeletePed', function(netIds)
                 end
                 -- remove from active map after deletion
                 ActivePeds[netId] = nil
+                -- notify clients that this remote ped was removed
+                TriggerClientEvent('bcc-waves:RemotePedsRemoved', -1, site, { netId })
             end
         end
     end
@@ -79,4 +81,6 @@ RegisterNetEvent('bcc-waves:RegisterPeds', function(site, netIds)
             DBG.Warning("bcc-waves:RegisterPeds received invalid netId: " .. tostring(netId))
         end
     end
+    -- Notify clients about the newly registered peds so they can create local blips
+    TriggerClientEvent('bcc-waves:RemotePedsRegistered', -1, site, netIds)
 end)
